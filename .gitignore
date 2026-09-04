@@ -1,0 +1,13 @@
+/bin/
+/revtether
+*.pcap
+.DS_Store
+xcuserdata/
+DerivedData/
+*.xcuserstate
+.gradle/
+**/build/
+local.properties
+*.iml
+.idea/
+.kotlin/

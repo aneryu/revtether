@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" fill="#1C1C1E"/>
+  <text x="512" y="512" text-anchor="middle" dominant-baseline="middle"
+        font-family="Avenir Next Condensed" font-weight="800" font-size="560"
+        letter-spacing="-8" fill="#E8E8ED">RT</text>
+</svg>

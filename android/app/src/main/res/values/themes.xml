@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.ReverseTether" parent="Theme.Material3.Light.NoActionBar">
+        <item name="colorPrimary">#12706B</item>
+        <item name="android:statusBarColor">#E8F2F1</item>
+        <item name="android:windowBackground">#E8F2F1</item>
+    </style>
+</resources>
