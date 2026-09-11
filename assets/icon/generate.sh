@@ -51,3 +51,12 @@ xxxhdpi 192 432
 DENSITIES
 
 echo "wrote iOS $IOS_SET and Android mipmaps"
+
+if command -v rsvg-convert >/dev/null; then
+  rsvg-convert -w 44 -h 44 "$ICON/MenuBarTemplate.svg" -o "$ROOT/cmd/revtether-app/menubar.png"
+  echo "wrote $ROOT/cmd/revtether-app/menubar.png"
+fi
+
+if [[ "$(uname -s)" == Darwin ]]; then
+  bash "$ROOT/macos/make-icns.sh" "$ROOT/macos/AppIcon.icns"
+fi

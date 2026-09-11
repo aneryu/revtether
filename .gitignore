@@ -1,4 +1,6 @@
 /bin/
+/dist/
+/macos/AppIcon.icns
 /revtether
 *.pcap
 .DS_Store

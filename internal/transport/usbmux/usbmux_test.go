@@ -2,8 +2,14 @@ package usbmux
 
 import (
 	"bytes"
+	"errors"
+	"net"
+	"os"
+	"runtime"
+	"sync"
 	"syscall"
 	"testing"
+	"time"
 
 	"howett.net/plist"
 )
@@ -23,6 +29,76 @@ func TestRawStreamEcho(t *testing.T) {
 	n, err := b.Read(buf)
 	if err != nil || string(buf[:n]) != "hello" {
 		t.Fatalf("n=%d err=%v data=%q", n, err, buf[:n])
+	}
+}
+
+func TestRawStreamConcurrentCloseUnblocksRead(t *testing.T) {
+	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer syscall.Close(fds[1])
+	s := &rawStream{fd: fds[0]}
+	defer s.Close()
+	done := make(chan error, 1)
+	go func() {
+		_, err := s.Read(make([]byte, 1))
+		done <- err
+	}()
+	deadline := time.Now().Add(time.Second)
+	for s.mu.TryLock() {
+		s.mu.Unlock()
+		if time.Now().After(deadline) {
+			t.Fatal("read did not start")
+		}
+		runtime.Gosched()
+	}
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			if err := s.Close(); err != nil {
+				t.Errorf("Close: %v", err)
+			}
+		})
+	}
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("read succeeded after close")
+		}
+	case <-time.After(time.Second):
+		// Closing the peer also releases a broken implementation's blocked read.
+		_ = syscall.Shutdown(fds[1], syscall.SHUT_RDWR)
+		t.Fatal("close did not unblock read")
+	}
+	wg.Wait()
+	if _, err := s.Write([]byte("closed")); !errors.Is(err, net.ErrClosed) {
+		t.Fatalf("write after close: %v", err)
+	}
+}
+
+func TestAdaptStreamClosesOriginalConn(t *testing.T) {
+	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer syscall.Close(fds[1])
+	f := os.NewFile(uintptr(fds[0]), "usbmux-test")
+	conn, err := net.FileConn(f)
+	_ = f.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	stream := adaptStream(conn)
+	if _, err := stream.Write([]byte("hello")); err != nil {
+		t.Fatal(err)
+	}
+	if err := stream.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Write([]byte("closed")); !errors.Is(err, net.ErrClosed) {
+		t.Fatalf("original net.Conn still owns its descriptor: %v", err)
 	}
 }
 
@@ -72,7 +148,7 @@ func TestAttachedEventUSBOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	ev, ok := eventFromAttached(m)
-	if !ok || ev.ID != "7" || ev.Serial != "00008030-001A" || !ev.Attached {
+	if !ok || ev.ID != "7" || ev.Serial != "00008030-001A" || !ev.Attached || ev.Name != "iPhone" {
 		t.Fatalf("ev=%+v ok=%v", ev, ok)
 	}
 
@@ -83,6 +159,15 @@ func TestAttachedEventUSBOnly(t *testing.T) {
 	}
 	if _, ok := eventFromAttached(nm); ok {
 		t.Fatal("network device should be ignored")
+	}
+}
+
+func TestIOSKind(t *testing.T) {
+	if iosKind(0x12a8) != "iPhone" {
+		t.Fatal(iosKind(0x12a8))
+	}
+	if iosKind(0x12ab) != "iPad" {
+		t.Fatal(iosKind(0x12ab))
 	}
 }
 

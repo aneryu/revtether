@@ -70,6 +70,71 @@ func TestStackTCPForwarderDialsTarget(t *testing.T) {
 	}
 }
 
+func TestStackTCPForwarderRewritesGatewayToLocalhost(t *testing.T) {
+	ep := channel.New(64, 1400, "")
+	s, err := newStack(ep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Destroy()
+
+	d := &captureDialer{ch: make(chan struct{}, 1)}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	installTCP(ctx, s, d, nil, nil)
+
+	pkt := makeTCPSYN(
+		tcpip.AddrFrom4([4]byte{198, 18, 0, 2}),
+		tcpip.AddrFrom4([4]byte{198, 18, 0, 1}),
+		40000, 8081,
+	)
+	pb := stack.NewPacketBuffer(stack.PacketBufferOptions{Payload: buffer.MakeWithData(pkt)})
+	ep.InjectInbound(ipv4.ProtocolNumber, pb)
+	pb.DecRef()
+
+	select {
+	case <-d.ch:
+	case <-ctx.Done():
+		t.Fatal("dialer was not called for gateway")
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.network != "tcp" || d.addr != "127.0.0.1:8081" {
+		t.Fatalf("dialed %s %s", d.network, d.addr)
+	}
+}
+
+func TestStackTCPForwarderAcceptsZeroChecksum(t *testing.T) {
+	ep := channel.New(64, 1400, "")
+	ep.LinkEPCapabilities = stack.CapabilityRXChecksumOffload
+	s, err := newStack(ep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Destroy()
+
+	d := &captureDialer{ch: make(chan struct{}, 1)}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	installTCP(ctx, s, d, nil, nil)
+
+	pkt := makeTCPSYN(
+		tcpip.AddrFrom4([4]byte{198, 18, 0, 2}),
+		tcpip.AddrFrom4([4]byte{1, 2, 3, 4}),
+		40000, 80,
+	)
+	header.TCP(pkt[header.IPv4MinimumSize:]).SetChecksum(0)
+	pb := stack.NewPacketBuffer(stack.PacketBufferOptions{Payload: buffer.MakeWithData(pkt)})
+	ep.InjectInbound(ipv4.ProtocolNumber, pb)
+	pb.DecRef()
+
+	select {
+	case <-d.ch:
+	case <-ctx.Done():
+		t.Fatal("dialer was not called for zero-checksum SYN")
+	}
+}
+
 func makeTCPSYN(src, dst tcpip.Address, srcPort, dstPort uint16) []byte {
 	tcpLen := header.TCPMinimumSize
 	total := header.IPv4MinimumSize + tcpLen

@@ -12,8 +12,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     override func startTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
         // 127.0.0.1 tells NESM this is a local tunnel. lockdownd talks to the
         // container app on :31416; this extension only moves IP packets.
+        // Use /32 so 198.18.0.1 is not on-link (packet tunnels have no ARP).
         let s = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "127.0.0.1")
-        let v4 = NEIPv4Settings(addresses: ["198.18.0.2"], subnetMasks: ["255.255.255.0"])
+        let v4 = NEIPv4Settings(addresses: ["198.18.0.2"], subnetMasks: ["255.255.255.255"])
         v4.includedRoutes = Self.routesExcludingLoopbackAndLAN
         v4.excludedRoutes = [
             NEIPv4Route(destinationAddress: "127.0.0.0", subnetMask: "255.0.0.0"),
@@ -23,7 +24,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             NEIPv4Route(destinationAddress: "169.254.0.0", subnetMask: "255.255.0.0"),
         ]
         s.ipv4Settings = v4
-        s.dnsSettings = NEDNSSettings(servers: ["198.18.0.1"])
+        let dns = NEDNSSettings(servers: ["198.18.0.1"])
+        dns.matchDomains = [""]
+        s.dnsSettings = dns
         s.mtu = 1400
         setTunnelNetworkSettings(s) { [self] err in
             if let err {
@@ -85,8 +88,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     /// 0.0.0.0/0 minus RFC1918, 169.254/16, and 127/8 so lockdownd → localhost
-    /// stays on the real stack. 198.18.0.0/24 is covered by 196.0.0.0/6.
+    /// stays on the real stack. 198.18.0.1/32 is the host gateway (localhost
+    /// remap); the rest of 198.18.0.0/24 is covered by 196.0.0.0/6.
     private static let routesExcludingLoopbackAndLAN: [NEIPv4Route] = [
+        ("198.18.0.1", "255.255.255.255"),
         ("0.0.0.0", "248.0.0.0"),
         ("8.0.0.0", "254.0.0.0"),
         ("11.0.0.0", "255.0.0.0"),

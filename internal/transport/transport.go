@@ -25,7 +25,8 @@ func (p Platform) String() string {
 
 type DeviceEvent struct {
 	ID       string // usbmux DeviceID 或 adb serial
-	Serial   string // UDID / serial，用于显示
+	Serial   string // UDID / serial
+	Name     string // 可读名称，如「陈宇哲的iPhone」
 	Platform Platform
 	Attached bool
 	Message  string // 可选提示，如 unauthorized

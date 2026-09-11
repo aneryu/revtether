@@ -86,6 +86,11 @@ func installUDP(ctx context.Context, s *stack.Stack, d dialer.Dialer, log *slog.
 			log.Debug("udp open", "target", target)
 		}
 		go func() {
+			stopClose := context.AfterFunc(ctx, func() {
+				_ = devConn.Close()
+				_ = hostConn.Close()
+			})
+			defer stopClose()
 			relayUDP(devConn, hostConn, udpIdle, sessions)
 			if st != nil {
 				st.UDP.Add(-1)

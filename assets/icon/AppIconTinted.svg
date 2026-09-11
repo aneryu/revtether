@@ -1,7 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <rect width="1024" height="1024" fill="#1C1C1E"/>
-  <text x="512" y="512" text-anchor="middle" dominant-baseline="middle"
-        font-family="Avenir Next Condensed" font-weight="800" font-size="560"
-        letter-spacing="-8" fill="#E8E8ED">RT</text>
+  <g transform="translate(512 512) scale(0.82) translate(-512 -512)">
+    <g fill="none" stroke="#E8E8ED" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="321" y="82" width="382" height="691" rx="78" ry="78" stroke-width="10"/>
+      <g stroke-width="20">
+        <path d="M 357.6 387.3 A 196 196 0 0 1 666.4 387.3"/>
+        <path d="M 407.8 420.6 A 136 136 0 0 1 616.2 420.6"/>
+        <path d="M 455.5 457.2 A 76 76 0 0 1 568.5 457.2"/>
+      </g>
+      <path d="M 512 773 V 844" stroke-width="14" stroke-linecap="butt"/>
+    </g>
+    <circle cx="512" cy="508" r="20" fill="#E8E8ED"/>
+    <rect x="487" y="844" width="50" height="86" rx="10" fill="#E8E8ED"/>
+  </g>
 </svg>

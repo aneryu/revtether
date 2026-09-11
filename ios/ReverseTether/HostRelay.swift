@@ -10,6 +10,7 @@ final class HostRelay: @unchecked Sendable {
     static let shared = HostRelay()
 
     var onHandedOff: (() -> Void)?
+    var onDropped: (() -> Void)?
 
     private let queue = DispatchQueue(label: "revtether.host-relay")
     private let log = OSLog(subsystem: "dev.fun.revtether", category: "relay")
@@ -20,6 +21,7 @@ final class HostRelay: @unchecked Sendable {
     private var rx = Data()
     private var uplink: [Data] = []
     private var ipcBusy = false
+    private var clientGeneration: UInt64 = 0
     private var pollTimer: DispatchSourceTimer?
     private var keepalive: DispatchSourceTimer?
     private weak var session: NETunnelProviderSession?
@@ -45,6 +47,7 @@ final class HostRelay: @unchecked Sendable {
             src.resume()
             acceptSource = src
             os_log("listening on 0.0.0.0:31416 for usbmux", log: log, type: .info)
+            DispatchQueue.main.async { StayAlive.start() }
         }
     }
 
@@ -57,6 +60,7 @@ final class HostRelay: @unchecked Sendable {
                 UnixSocket.close(listenFd)
                 listenFd = -1
             }
+            DispatchQueue.main.async { StayAlive.stop() }
         }
     }
 
@@ -77,7 +81,6 @@ final class HostRelay: @unchecked Sendable {
         startKeepalive()
         startPoll()
         DispatchQueue.main.async {
-            StayAlive.start()
             self.onHandedOff?()
         }
         flushIPC()
@@ -113,12 +116,13 @@ final class HostRelay: @unchecked Sendable {
         guard !ipcBusy, clientFd >= 0 else { return }
         guard let session else { return }
         ipcBusy = true
+        let generation = clientGeneration
         let payload = TunnelIPC.encode(uplink)
         uplink.removeAll()
         do {
             try session.sendProviderMessage(payload) { [weak self] response in
                 self?.queue.async {
-                    guard let self else { return }
+                    guard let self, self.clientGeneration == generation else { return }
                     self.ipcBusy = false
                     if let response {
                         for pkt in TunnelIPC.decode(response) {
@@ -178,6 +182,8 @@ final class HostRelay: @unchecked Sendable {
     }
 
     private func dropClient() {
+        clientGeneration &+= 1
+        let hadClient = clientFd >= 0
         pollTimer?.cancel()
         pollTimer = nil
         keepalive?.cancel()
@@ -191,6 +197,10 @@ final class HostRelay: @unchecked Sendable {
         rx.removeAll()
         uplink.removeAll()
         ipcBusy = false
-        DispatchQueue.main.async { StayAlive.stop() }
+        DispatchQueue.main.async {
+            if hadClient {
+                self.onDropped?()
+            }
+        }
     }
 }

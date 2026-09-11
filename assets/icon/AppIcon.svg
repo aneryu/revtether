@@ -1,20 +1,37 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
-    <linearGradient id="bg" x1="0.12" y1="0" x2="0.92" y2="1">
-      <stop offset="0%" stop-color="#1C8A76"/>
-      <stop offset="52%" stop-color="#127067"/>
-      <stop offset="100%" stop-color="#0B3F43"/>
-    </linearGradient>
-    <radialGradient id="glow" cx="34%" cy="22%" r="70%">
-      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.18"/>
-      <stop offset="45%" stop-color="#FFFFFF" stop-opacity="0.05"/>
-      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    <radialGradient id="bg" gradientUnits="userSpaceOnUse" cx="512" cy="390" r="720">
+      <stop offset="0%" stop-color="#0A1C28"/>
+      <stop offset="45%" stop-color="#05090E"/>
+      <stop offset="100%" stop-color="#000000"/>
     </radialGradient>
+    <filter id="glow" x="-50%" y="-30%" width="200%" height="170%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="16" result="wide"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="near"/>
+      <feMerge>
+        <feMergeNode in="wide"/>
+        <feMergeNode in="near"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
   </defs>
+  <rect width="1024" height="1024" fill="#000000"/>
   <rect width="1024" height="1024" fill="url(#bg)"/>
-  <rect width="1024" height="1024" fill="url(#glow)"/>
-  <text x="512" y="512" text-anchor="middle" dominant-baseline="middle"
-        font-family="Avenir Next Condensed" font-weight="800" font-size="560"
-        letter-spacing="-8" fill="#F4F8F6">RT</text>
+  <!-- Scale keeps the mark inside a circle (Android round / OEM circular masks). -->
+  <g transform="translate(512 512) scale(0.82) translate(-512 -512)">
+    <g filter="url(#glow)" fill="none" stroke="#0AF9FE" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="321" y="82" width="382" height="691" rx="78" ry="78" stroke-width="10"/>
+      <g stroke-width="20">
+        <path d="M 357.6 387.3 A 196 196 0 0 1 666.4 387.3"/>
+        <path d="M 407.8 420.6 A 136 136 0 0 1 616.2 420.6"/>
+        <path d="M 455.5 457.2 A 76 76 0 0 1 568.5 457.2"/>
+      </g>
+      <path d="M 512 773 V 844" stroke-width="14" stroke-linecap="butt"/>
+    </g>
+    <g filter="url(#glow)">
+      <circle cx="512" cy="508" r="20" fill="#0AF9FE"/>
+      <rect x="487" y="844" width="50" height="86" rx="10" fill="#0AF9FE"/>
+    </g>
+  </g>
 </svg>

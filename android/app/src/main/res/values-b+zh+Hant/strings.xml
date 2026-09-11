@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Reverse Tether</string>
+
+    <string name="status_idle_title">未開啟</string>
+    <string name="status_starting_title">正在準備…</string>
+    <string name="status_waiting_title">等待電腦</string>
+    <string name="status_connected_title">正在使用電腦網路</string>
+    <string name="status_failed_title">沒能開啟</string>
+
+    <string name="status_idle_detail">點開始後，這台手機將透過 USB 使用電腦的網路。</string>
+    <string name="status_starting_detail">如有系統提示，請點允許。</string>
+    <string name="status_connected_detail">保持 USB 線連著即可。</string>
+
+    <string name="step_usb">用 USB 線接上電腦</string>
+    <string name="step_computer">在電腦上打開 Reverse Tether</string>
+
+    <string name="action_start">開始</string>
+    <string name="action_starting">正在準備</string>
+    <string name="action_stop">停止</string>
+    <string name="action_cancel">取消</string>
+    <string name="action_exclude_apps">繼續走流量的 App</string>
+
+    <string name="error_vpn_denied">需要允許才能使用電腦網路。請再試一次，並點允許。</string>
+
+    <string name="notif_channel">Reverse Tether</string>
+    <string name="vpn_session">Reverse Tether</string>
+
+    <string name="exclude_hint">勾選的 App 仍走手機自己的網路，不走電腦。</string>
+    <string name="exclude_search_hint">搜尋</string>
+    <string name="exclude_selected">已選 %d 個</string>
+    <string name="exclude_empty">找不到 App</string>
+    <string name="exclude_icon">App 圖示</string>
+</resources>

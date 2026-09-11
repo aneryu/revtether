@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg_top">#EDF2F8</color>
+    <color name="bg_bottom">#D1E0DB</color>
+    <color name="text_title">#14242E</color>
+    <color name="text_status">#2E524D</color>
+    <color name="text_detail">#475C61</color>
+    <color name="accent">#126B66</color>
+    <color name="status_idle">#8C999E</color>
+    <color name="status_waiting">#D99421</color>
+    <color name="status_connected">#219E73</color>
+    <color name="status_failed">#BF3838</color>
+    <color name="divider">#14122428</color>
+    <color name="search_bg">#B3FFFFFF</color>
+    <color name="pill_bg">#73FFFFFF</color>
+    <color name="white">#FFFFFFFF</color>
+</resources>

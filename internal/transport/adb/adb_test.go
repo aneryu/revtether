@@ -29,6 +29,18 @@ func TestParseDeviceLines(t *testing.T) {
 	if len(evs) != 1 || evs[0].ID != "emulator-5554" || !evs[0].Attached {
 		t.Fatalf("%+v", evs)
 	}
+
+	long := "0A081JEC212692         device usb:1048576X product:sunfish model:Pixel_4a device:sunfish transport_id:2\n"
+	evs = ParseDeviceLines(long)
+	if len(evs) != 1 || evs[0].Name != "Pixel 4a" || evs[0].ID != "0A081JEC212692" {
+		t.Fatalf("%+v", evs)
+	}
+
+	tabLong := "0A081JEC212692\tdevice usb:1-1.3 product:sunfish model:Pixel_4a device:sunfish\n"
+	evs = ParseDeviceLines(tabLong)
+	if len(evs) != 1 || evs[0].Name != "Pixel 4a" {
+		t.Fatalf("%+v", evs)
+	}
 }
 
 func TestReadStatusOKAYFAIL(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -34,10 +35,11 @@ var (
 )
 
 type Config struct {
-	Dialer dialer.Dialer
-	Log    *slog.Logger
-	PCAP   io.Writer
-	Stats  *Stats
+	Dialer  dialer.Dialer
+	Log     *slog.Logger
+	PCAP    io.Writer
+	Capture *Capture
+	Stats   *Stats
 }
 
 func Run(ctx context.Context, stream io.ReadWriteCloser, d dialer.Dialer, log *slog.Logger) error {
@@ -45,6 +47,16 @@ func Run(ctx context.Context, stream io.ReadWriteCloser, d dialer.Dialer, log *s
 }
 
 func RunConfig(ctx context.Context, stream io.ReadWriteCloser, cfg Config) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var closeOnce sync.Once
+	closeStream := func() { closeOnce.Do(func() { _ = stream.Close() }) }
+	stopClose := context.AfterFunc(ctx, closeStream)
+	defer func() {
+		stopClose()
+		closeStream()
+	}()
+
 	if cfg.Dialer == nil {
 		cfg.Dialer = dialer.Direct
 	}
@@ -55,11 +67,11 @@ func RunConfig(ctx context.Context, stream io.ReadWriteCloser, cfg Config) error
 		cfg.Stats = &Stats{}
 	}
 
-	var pcap *pcapWriter
-	if cfg.PCAP != nil {
+	pcap := cfg.Capture
+	if pcap == nil && cfg.PCAP != nil {
 		cfg.Log.Info("pcap init", "writer", fmt.Sprintf("%T", cfg.PCAP))
 		var err error
-		pcap, err = newPCAP(cfg.PCAP)
+		pcap, err = NewCapture(cfg.PCAP)
 		if err != nil {
 			cfg.Log.Info("pcap init failed", "error", err.Error(), "err_type", fmt.Sprintf("%T", err))
 			return fmt.Errorf("pcap: %w", err)
@@ -67,6 +79,8 @@ func RunConfig(ctx context.Context, stream io.ReadWriteCloser, cfg Config) error
 	}
 
 	cfg.Log.Info("handshake begin", "stream", fmt.Sprintf("%T", stream))
+	handshakeTimer := time.AfterFunc(watchdogIdle, cancel)
+	defer handshakeTimer.Stop()
 	hsStart := time.Now()
 	br := bufio.NewReaderSize(stream, 64*1024)
 	t, p, err := framing.Read(br)
@@ -103,8 +117,12 @@ func RunConfig(ctx context.Context, stream io.ReadWriteCloser, cfg Config) error
 		return fmt.Errorf("handshake write: %w", err)
 	}
 	cfg.Log.Info("handshake ok", "device_platform", plat, "elapsed", time.Since(hsStart).String())
+	handshakeTimer.Stop()
 
 	ep := channel.New(channelSize, mtu, "")
+	// Android VpnService often delivers TCP with a zero checksum (offload).
+	// IPv4 UDP checksum 0 is legal, which is why DNS already worked.
+	ep.LinkEPCapabilities = stack.CapabilityRXChecksumOffload
 	s, err := newStack(ep)
 	if err != nil {
 		ep.Close()
@@ -113,9 +131,6 @@ func RunConfig(ctx context.Context, stream io.ReadWriteCloser, cfg Config) error
 	sessions := newSessions(maxUDPSessions)
 	installTCP(ctx, s, cfg.Dialer, cfg.Log, cfg.Stats)
 	installUDP(ctx, s, cfg.Dialer, cfg.Log, cfg.Stats, sessions)
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 
 	lw := newFrameWriter(bufio.NewWriterSize(stream, 64*1024))
 
@@ -154,7 +169,6 @@ func RunConfig(ctx context.Context, stream io.ReadWriteCloser, cfg Config) error
 		"err_type", fmt.Sprintf("%T", err),
 		"unwrap", errStr(errors.Unwrap(err)),
 	)
-	_ = stream.Close()
 	ep.Close()
 	s.Close()
 	s.Destroy()
@@ -171,7 +185,7 @@ func errStr(err error) string {
 	return err.Error()
 }
 
-func inbound(ctx context.Context, br *bufio.Reader, ep *channel.Endpoint, enqueue func([]byte), pcap *pcapWriter, st *Stats, lastSeen *atomic.Int64) error {
+func inbound(ctx context.Context, br *bufio.Reader, ep *channel.Endpoint, enqueue func([]byte), pcap *Capture, st *Stats, lastSeen *atomic.Int64) error {
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -220,7 +234,7 @@ func outbound(ctx context.Context, ep *channel.Endpoint, enqueue func([]byte)) e
 	}
 }
 
-func writer(ctx context.Context, lw *frameWriter, out <-chan []byte, pcap *pcapWriter, st *Stats) error {
+func writer(ctx context.Context, lw *frameWriter, out <-chan []byte, pcap *Capture, st *Stats) error {
 	tick := time.NewTicker(keepaliveInt)
 	defer tick.Stop()
 	for {

@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"io"
 	"log/slog"
@@ -59,4 +60,55 @@ func TestHandshakeThenKeepalive(t *testing.T) {
 	}
 	cancel()
 	wg.Wait()
+}
+
+type readObservedConn struct {
+	net.Conn
+	reading chan struct{}
+}
+
+func (c *readObservedConn) Read(p []byte) (int, error) {
+	c.reading <- struct{}{}
+	return c.Conn.Read(p)
+}
+
+func TestCancelUnblocksStreamRead(t *testing.T) {
+	for _, handshake := range []bool{false, true} {
+		name := "waiting_for_hello"
+		if handshake {
+			name = "connected"
+		}
+		t.Run(name, func(t *testing.T) {
+			peer, conn := net.Pipe()
+			defer peer.Close()
+			defer conn.Close()
+			stream := &readObservedConn{Conn: conn, reading: make(chan struct{}, 8)}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			done := make(chan error, 1)
+			go func() {
+				done <- Run(ctx, stream, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+			}()
+			<-stream.reading
+			if handshake {
+				var hello bytes.Buffer
+				_ = framing.Write(&hello, framing.TypeHello, framing.EncodeHello(framing.PlatformIOS))
+				if _, err := peer.Write(hello.Bytes()); err != nil {
+					t.Fatal(err)
+				}
+				if _, _, err := framing.Read(bufio.NewReader(peer)); err != nil {
+					t.Fatal(err)
+				}
+				<-stream.reading
+			}
+			cancel()
+			select {
+			case <-done:
+			case <-time.After(time.Second):
+				_ = peer.Close()
+				<-done
+				t.Fatal("cancellation did not unblock the stream read")
+			}
+		})
+	}
 }

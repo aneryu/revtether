@@ -1,4 +1,4 @@
-package dev.fun.revtether
+package dev.`fun`.revtether
 
 /** 0.0.0.0/0 减去 RFC1918 + 169.254/16，不含 224/3。198.18.0.0/24 被 196.0.0.0/6 覆盖。 */
 val ROUTES_EXCLUDING_LAN: List<Pair<String, Int>> = listOf(

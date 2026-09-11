@@ -1,4 +1,4 @@
-package dev.fun.revtether
+package dev.`fun`.revtether
 
 import java.io.InputStream
 import java.io.OutputStream

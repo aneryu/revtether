@@ -26,6 +26,8 @@
 		A100000000000012 /* TunnelIPC.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000012 /* TunnelIPC.swift */; };
 		A100000000000013 /* TunnelIPC.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000012 /* TunnelIPC.swift */; };
 		A100000000000014 /* Frame.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000005 /* Frame.swift */; };
+		A100000000000020 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = B100000000000020 /* Localizable.xcstrings */; };
+		A100000000000021 /* L10n.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000023 /* L10n.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -63,13 +65,15 @@
 		B100000000000008 /* ReverseTether.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ReverseTether.entitlements; sourceTree = "<group>"; };
 		B100000000000009 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B10000000000000A /* ReverseTetherTunnel.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ReverseTetherTunnel.entitlements; sourceTree = "<group>"; };
-		B10000000000000B /* TunnelInfo.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B10000000000000B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B10000000000000C /* AppGroup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppGroup.swift; sourceTree = "<group>"; };
 		B10000000000000D /* UnixSocket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnixSocket.swift; sourceTree = "<group>"; };
 		B10000000000000E /* HostRelay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostRelay.swift; sourceTree = "<group>"; };
 		B10000000000000F /* HostChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostChannel.swift; sourceTree = "<group>"; };
 		B100000000000011 /* StayAlive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StayAlive.swift; sourceTree = "<group>"; };
 		B100000000000012 /* TunnelIPC.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelIPC.swift; sourceTree = "<group>"; };
+		B100000000000020 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		B100000000000023 /* L10n.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = L10n.swift; sourceTree = "<group>"; };
 		P100000000000001 /* ReverseTether.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ReverseTether.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		P100000000000002 /* ReverseTetherTunnel.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ReverseTetherTunnel.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -111,9 +115,11 @@
 			children = (
 				B100000000000001 /* ReverseTetherApp.swift */,
 				B100000000000002 /* ContentView.swift */,
+				B100000000000023 /* L10n.swift */,
 				B10000000000000E /* HostRelay.swift */,
 				B100000000000011 /* StayAlive.swift */,
 				B100000000000003 /* Assets.xcassets */,
+				B100000000000020 /* Localizable.xcstrings */,
 				B100000000000008 /* ReverseTether.entitlements */,
 				B100000000000009 /* Info.plist */,
 			);
@@ -127,7 +133,7 @@
 				B100000000000005 /* Frame.swift */,
 				B10000000000000F /* HostChannel.swift */,
 				B10000000000000A /* ReverseTetherTunnel.entitlements */,
-				B10000000000000B /* TunnelInfo.plist */,
+				B10000000000000B /* Info.plist */,
 			);
 			path = ReverseTetherTunnel;
 			sourceTree = "<group>";
@@ -215,6 +221,8 @@
 			knownRegions = (
 				en,
 				Base,
+				"zh-Hans",
+				"zh-Hant",
 			);
 			mainGroup = H100000000000001;
 			productRefGroup = H100000000000005 /* Products */;
@@ -233,6 +241,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A100000000000003 /* Assets.xcassets in Resources */,
+				A100000000000020 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -245,6 +254,7 @@
 			files = (
 				A100000000000001 /* ReverseTetherApp.swift in Sources */,
 				A100000000000002 /* ContentView.swift in Sources */,
+				A100000000000021 /* L10n.swift in Sources */,
 				A10000000000000A /* AppGroup.swift in Sources */,
 				A10000000000000C /* UnixSocket.swift in Sources */,
 				A10000000000000E /* HostRelay.swift in Sources */,
@@ -326,6 +336,7 @@
 				DEVELOPMENT_TEAM = KAN8E65MGP;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ReverseTether/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -350,6 +361,7 @@
 				DEVELOPMENT_TEAM = KAN8E65MGP;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ReverseTether/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

@@ -16,9 +16,9 @@ import (
 )
 
 const (
-	adbAddr     = "127.0.0.1:5037"
-	devicePort  = 31416
-	statusLen   = 4
+	adbAddr    = "127.0.0.1:5037"
+	devicePort = 31416
+	statusLen  = 4
 )
 
 var (
@@ -27,8 +27,8 @@ var (
 )
 
 type Client struct {
-	mu        sync.Mutex
-	forwards  map[string]int // serial -> local port
+	mu       sync.Mutex
+	forwards map[string]int // serial -> local port
 }
 
 func New() *Client {
@@ -39,7 +39,7 @@ func (c *Client) connect(ctx context.Context) (net.Conn, error) {
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "tcp", adbAddr)
 	if err != nil {
-		if startErr := startServer(); startErr != nil {
+		if startErr := startServer(ctx); startErr != nil {
 			return nil, fmt.Errorf("%w: %v (adb start-server: %v)", ErrUnavailable, err, startErr)
 		}
 		conn, err = d.DialContext(ctx, "tcp", adbAddr)
@@ -47,11 +47,23 @@ func (c *Client) connect(ctx context.Context) (net.Conn, error) {
 			return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
 		}
 	}
-	return conn, nil
+	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	return &controlConn{Conn: conn, stop: stop}, nil
 }
 
-func startServer() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+// ADB protocol reads must stop when the caller cancels, not only its TCP dial.
+type controlConn struct {
+	net.Conn
+	stop func() bool
+}
+
+func (c *controlConn) Close() error {
+	c.stop()
+	return c.Conn.Close()
+}
+
+func startServer(parent context.Context) error {
+	ctx, cancel := context.WithTimeout(parent, 8*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "adb", "start-server")
 	out, err := cmd.CombinedOutput()
@@ -144,17 +156,18 @@ func parseDeviceLines(text string, notifyUnauthorized func(serial string)) []tra
 		if line == "" {
 			continue
 		}
-		serial, state, _ := strings.Cut(line, "\t")
-		serial = strings.TrimSpace(serial)
-		state = strings.TrimSpace(state)
-		if serial == "" {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
 			continue
 		}
+		serial, state := fields[0], fields[1]
+		extras := strings.Join(fields[2:], " ")
 		switch state {
 		case "device":
 			out = append(out, transport.DeviceEvent{
 				ID:       serial,
 				Serial:   serial,
+				Name:     androidModel(extras),
 				Platform: transport.Android,
 				Attached: true,
 			})
@@ -165,6 +178,49 @@ func parseDeviceLines(text string, notifyUnauthorized func(serial string)) []tra
 		}
 	}
 	return out
+}
+
+func androidModel(extras string) string {
+	for _, f := range strings.Fields(extras) {
+		k, v, ok := strings.Cut(f, ":")
+		if ok && k == "model" && v != "" {
+			return strings.ReplaceAll(v, "_", " ")
+		}
+	}
+	return ""
+}
+
+func (c *Client) lookupName(ctx context.Context, serial string) string {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	if list, err := c.ListDevices(ctx); err == nil {
+		for _, d := range list {
+			if d.ID == serial && d.Name != "" {
+				return d.Name
+			}
+		}
+	}
+	return c.lookupNameFromProp(ctx, serial)
+}
+
+func (c *Client) lookupNameFromProp(ctx context.Context, serial string) string {
+	conn, err := c.connect(ctx)
+	if err != nil {
+		return ""
+	}
+	defer conn.Close()
+	cmd := fmt.Sprintf("host-serial:%s:shell:getprop ro.product.model", serial)
+	if err := sendRequest(conn, cmd); err != nil {
+		return ""
+	}
+	if err := readStatus(conn); err != nil {
+		return ""
+	}
+	b, err := io.ReadAll(io.LimitReader(conn, 256))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(strings.ReplaceAll(string(b), "\r", ""))
 }
 
 func (c *Client) Watch(ctx context.Context) (<-chan transport.DeviceEvent, error) {
@@ -190,15 +246,10 @@ func (c *Client) Watch(ctx context.Context) (<-chan transport.DeviceEvent, error
 			if err := ctx.Err(); err != nil {
 				return
 			}
-			_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 			blob, err := readHexBlob(conn)
 			if err != nil {
-				if ne, ok := err.(net.Error); ok && ne.Timeout() {
-					continue
-				}
 				return
 			}
-			_ = conn.SetReadDeadline(time.Time{})
 			var unauthorized []string
 			live := parseDeviceLines(blob, func(s string) { unauthorized = append(unauthorized, s) })
 			seen := map[string]bool{}
@@ -206,6 +257,12 @@ func (c *Client) Watch(ctx context.Context) (<-chan transport.DeviceEvent, error
 				seen[ev.ID] = true
 				if !known[ev.ID] {
 					known[ev.ID] = true
+					if ev.Name == "" {
+						ev.Name = c.lookupName(ctx, ev.ID)
+					}
+					if ev.Name == "" {
+						ev.Name = "Android"
+					}
 					select {
 					case ch <- ev:
 					case <-ctx.Done():
@@ -281,6 +338,8 @@ func (c *Client) Connect(ctx context.Context, deviceID string, port uint16) (io.
 }
 
 func (c *Client) forward(ctx context.Context, serial string, local, remote int) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	conn, err := c.connect(ctx)
 	if err != nil {
 		return err
@@ -301,6 +360,8 @@ func (c *Client) forward(ctx context.Context, serial string, local, remote int) 
 }
 
 func (c *Client) killForward(ctx context.Context, serial string, local int) error {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
 	conn, err := c.connect(ctx)
 	if err != nil {
 		return err
@@ -317,12 +378,14 @@ func (c *Client) killForward(ctx context.Context, serial string, local int) erro
 }
 
 func (c *Client) ListDevices(ctx context.Context) ([]transport.DeviceEvent, error) {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
 	conn, err := c.connect(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer conn.Close()
-	if err := sendRequest(conn, "host:devices"); err != nil {
+	if err := sendRequest(conn, "host:devices-l"); err != nil {
 		return nil, err
 	}
 	if err := readStatus(conn); err != nil {

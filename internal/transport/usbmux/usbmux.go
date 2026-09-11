@@ -183,9 +183,11 @@ func eventFromAttached(m plistMap) (transport.DeviceEvent, bool) {
 	}
 	id := m.int("DeviceID")
 	serial := props.str("SerialNumber")
+	productID := props.int("ProductID")
 	return transport.DeviceEvent{
 		ID:       strconv.Itoa(id),
 		Serial:   serial,
+		Name:     iosKind(productID),
 		Platform: transport.IOS,
 		Attached: true,
 	}, true
@@ -228,7 +230,11 @@ func (c *Client) Watch(ctx context.Context) (<-chan transport.DeviceEvent, error
 		go func() {
 			for {
 				_, b, err := readPacket(conn)
-				incoming <- pkt{b, err}
+				select {
+				case incoming <- pkt{b, err}:
+				case <-ctx.Done():
+					return
+				}
 				if err != nil {
 					return
 				}
@@ -249,7 +255,8 @@ func (c *Client) Watch(ctx context.Context) (<-chan transport.DeviceEvent, error
 				switch msg.str("MessageType") {
 				case "Attached":
 					if ev, ok := eventFromAttached(msg); ok {
-						slog.Info("usbmux watch attached", "id", ev.ID, "serial", ev.Serial)
+						ev.Name = enrichIOSName(ev.ID, ev.Serial, msg.dict("Properties").int("ProductID"))
+						slog.Info("usbmux watch attached", "id", ev.ID, "serial", ev.Serial, "name", ev.Name)
 						select {
 						case ch <- ev:
 						case <-ctx.Done():
@@ -384,6 +391,12 @@ func (c *Client) ListDevices() ([]transport.DeviceEvent, error) {
 			continue
 		}
 		if ev, ok := eventFromAttached(plistMap(dm)); ok {
+			props := plistMap(dm).dict("Properties")
+			var productID int
+			if props != nil {
+				productID = props.int("ProductID")
+			}
+			ev.Name = enrichIOSName(ev.ID, ev.Serial, productID)
 			out = append(out, ev)
 		}
 	}

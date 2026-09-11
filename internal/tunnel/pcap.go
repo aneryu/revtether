@@ -9,12 +9,13 @@ import (
 
 const linkTypeRaw = 101
 
-type pcapWriter struct {
+// Capture serializes records from all devices and reconnects into one PCAP file.
+type Capture struct {
 	mu sync.Mutex
 	w  io.Writer
 }
 
-func newPCAP(w io.Writer) (*pcapWriter, error) {
+func NewCapture(w io.Writer) (*Capture, error) {
 	var hdr [24]byte
 	binary.LittleEndian.PutUint32(hdr[0:], 0xa1b2c3d4)
 	binary.LittleEndian.PutUint16(hdr[4:], 2)
@@ -24,10 +25,10 @@ func newPCAP(w io.Writer) (*pcapWriter, error) {
 	if _, err := w.Write(hdr[:]); err != nil {
 		return nil, err
 	}
-	return &pcapWriter{w: w}, nil
+	return &Capture{w: w}, nil
 }
 
-func (p *pcapWriter) writeIP(b []byte) {
+func (p *Capture) writeIP(b []byte) {
 	if p == nil || len(b) == 0 {
 		return
 	}

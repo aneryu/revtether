@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"runtime"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -15,14 +16,15 @@ import (
 )
 
 // adaptStream takes the unix socket after a successful usbmux Connect.
-// Darwin usbmuxd rewrites that fd into the device TCP stream. Two traps:
-//
-//  1. net.UnixConn.Close() calls shutdown(2), which kills every dup of the
-//     socket. We must not Close the original conn; keep it alive and only
-//     syscall.Close the fds ourselves.
-//  2. Go's poller returns EINVAL on the first I/O. Use blocking syscalls
-//     and treat (n>0, EINVAL) as a successful short read/write.
+// Keep the blocking-syscall workaround for Darwin usbmux I/O, including
+// successful short reads/writes accompanied by EINVAL. The original net.Conn
+// retains ownership of its descriptor and must be closed through net.Conn.Close
+// so Go's finalizer cannot later close a reused descriptor.
 func adaptStream(c net.Conn) io.ReadWriteCloser {
+	// Linux usbmuxd supplies a regular stream handled by Go's network poller.
+	if runtime.GOOS != "darwin" {
+		return c
+	}
 	orig, origErr := connFD(c)
 	fd, err := dupConnFD(c)
 	if err != nil {
@@ -31,8 +33,9 @@ func adaptStream(c net.Conn) io.ReadWriteCloser {
 		return c
 	}
 	nbErr := syscall.SetNonblock(fd, false)
-	if uc, ok := c.(*net.UnixConn); ok {
-		runtime.SetFinalizer(uc, nil)
+	if nbErr != nil {
+		_ = syscall.Close(fd)
+		return c
 	}
 	s := &rawStream{fd: fd, hold: c, holdFD: orig}
 	slog.Info("usbmux adaptStream",
@@ -69,18 +72,34 @@ func dupConnFD(c net.Conn) (int, error) {
 	if err != nil {
 		return -1, err
 	}
-	return syscall.Dup(fd)
+	dup, err := syscall.Dup(fd)
+	if err == nil {
+		syscall.CloseOnExec(dup)
+	}
+	return dup, err
 }
 
 type rawStream struct {
-	fd     int
-	hold   net.Conn
-	holdFD int
-	ops    atomic.Uint64
+	fd       int
+	hold     net.Conn
+	holdFD   int
+	ops      atomic.Uint64
+	mu       sync.RWMutex
+	closed   atomic.Bool
+	once     sync.Once
+	closeErr error
 }
 
 func (s *rawStream) Read(p []byte) (int, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if len(p) == 0 {
+		return 0, nil
+	}
 	for i := 0; i < 80; i++ {
+		if s.closed.Load() {
+			return 0, net.ErrClosed
+		}
 		n, err := syscall.Read(s.fd, p)
 		s.trace("read", len(p), n, err, i)
 		if n > 0 {
@@ -103,8 +122,13 @@ func (s *rawStream) Read(p []byte) (int, error) {
 }
 
 func (s *rawStream) Write(p []byte) (int, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	off := 0
 	for off < len(p) {
+		if s.closed.Load() {
+			return off, net.ErrClosed
+		}
 		n, err := syscall.Write(s.fd, p[off:])
 		s.trace("write", len(p)-off, n, err, off)
 		if n > 0 {
@@ -127,30 +151,19 @@ func (s *rawStream) Write(p []byte) (int, error) {
 }
 
 func (s *rawStream) Close() error {
-	slog.Info("usbmux rawStream.Close",
-		"dup_fd", s.fd, "hold_fd", s.holdFD, "ops", s.ops.Load(),
-		"dup_so_error", soError(s.fd), "hold_so_error", soError(s.holdFD),
-	)
-	var err error
-	if s.fd >= 0 {
-		err = syscall.Close(s.fd)
-		s.fd = -1
-	}
-	// Close the original fd without net.Conn.Close() (that would shutdown).
-	if s.hold != nil {
-		if sc, ok := s.hold.(syscall.Conn); ok {
-			if raw, e := sc.SyscallConn(); e == nil {
-				_ = raw.Control(func(f uintptr) {
-					_ = syscall.Close(int(f))
-				})
-			}
+	s.once.Do(func() {
+		s.closed.Store(true)
+		// Wake blocking syscalls before waiting for their descriptor references.
+		// Close alone need not interrupt a read on another thread.
+		_ = syscall.Shutdown(s.fd, syscall.SHUT_RDWR)
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.closeErr = syscall.Close(s.fd)
+		if s.hold != nil {
+			_ = s.hold.Close()
 		}
-		s.hold = nil
-	}
-	if err != nil {
-		slog.Info("usbmux rawStream.Close result", "error", err.Error())
-	}
-	return err
+	})
+	return s.closeErr
 }
 
 func (s *rawStream) trace(op string, size, n int, err error, extra int) {

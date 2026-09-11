@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"io"
 	"net"
 	"time"
 
@@ -14,8 +15,70 @@ import (
 
 var ErrNoNameserver = errors.New("dns: no nameserver")
 
+const dnsTypeAAAA = 28
+
 func truncated(resp []byte) bool {
 	return len(resp) >= 3 && resp[2]&0x02 != 0
+}
+
+func skipDNSName(msg []byte, i int) int {
+	for i < len(msg) {
+		l := int(msg[i])
+		if l == 0 {
+			return i + 1
+		}
+		if l&0xc0 == 0xc0 {
+			if i+2 > len(msg) {
+				return -1
+			}
+			return i + 2
+		}
+		if l&0xc0 != 0 {
+			return -1
+		}
+		i += 1 + l
+	}
+	return -1
+}
+
+func dnsQuestionType(q []byte) uint16 {
+	if len(q) < 12 {
+		return 0
+	}
+	i := skipDNSName(q, 12)
+	if i < 0 || i+2 > len(q) {
+		return 0
+	}
+	return binary.BigEndian.Uint16(q[i : i+2])
+}
+
+// emptyDNSReply is a NOERROR/NODATA response for the first question.
+// Used for AAAA on an IPv4-only tunnel so clients do not wait on unreachable IPv6.
+func emptyDNSReply(q []byte) []byte {
+	if len(q) < 12 {
+		return nil
+	}
+	qd := int(binary.BigEndian.Uint16(q[4:6]))
+	if qd < 1 {
+		qd = 1
+	}
+	end := 12
+	for n := 0; n < qd; n++ {
+		end = skipDNSName(q, end)
+		if end < 0 || end+4 > len(q) {
+			end = len(q)
+			break
+		}
+		end += 4
+	}
+	out := append([]byte(nil), q[:end]...)
+	rd := out[2] & 0x01
+	out[2] = 0x80 | rd
+	out[3] = 0x80
+	binary.BigEndian.PutUint16(out[6:], 0)
+	binary.BigEndian.PutUint16(out[8:], 0)
+	binary.BigEndian.PutUint16(out[10:], 0)
+	return out
 }
 
 func handleDNS(ctx context.Context, c *gonet.UDPConn, sess *Sessions) {
@@ -45,6 +108,11 @@ func handleDNS(ctx context.Context, c *gonet.UDPConn, sess *Sessions) {
 }
 
 func forwardQuery(ctx context.Context, q []byte) ([]byte, error) {
+	if dnsQuestionType(q) == dnsTypeAAAA {
+		if resp := emptyDNSReply(q); resp != nil {
+			return resp, nil
+		}
+	}
 	for _, ns := range resolvconf.Nameservers() {
 		resp, err := exchangeUDP(ctx, ns, q, 3*time.Second)
 		if err != nil {
@@ -95,7 +163,7 @@ func exchangeTCP(ctx context.Context, ns string, q []byte, timeout time.Duration
 	if _, err := c.Write(q); err != nil {
 		return nil, err
 	}
-	if _, err := c.Read(hdr[:]); err != nil {
+	if _, err := io.ReadFull(c, hdr[:]); err != nil {
 		return nil, err
 	}
 	n := int(binary.BigEndian.Uint16(hdr[:]))
@@ -103,20 +171,8 @@ func exchangeTCP(ctx context.Context, ns string, q []byte, timeout time.Duration
 		return nil, errors.New("dns: bad tcp length")
 	}
 	buf := make([]byte, n)
-	if err := readFull(c, buf); err != nil {
+	if _, err := io.ReadFull(c, buf); err != nil {
 		return nil, err
 	}
 	return buf, nil
-}
-
-func readFull(c net.Conn, buf []byte) error {
-	off := 0
-	for off < len(buf) {
-		n, err := c.Read(buf[off:])
-		if err != nil {
-			return err
-		}
-		off += n
-	}
-	return nil
 }

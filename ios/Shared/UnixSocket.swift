@@ -38,10 +38,40 @@ enum UnixSocket {
             }
         }
         guard fd >= 0 else { return nil }
+        // The listener binds all interfaces for usbmux, but only the device's
+        // own proxy may connect. Never hand the tunnel to a LAN client.
+        let localPeer = withUnsafePointer(to: &addr) { ptr in
+            ptr.withMemoryRebound(to: sockaddr_in.self, capacity: 1) {
+                $0.pointee.sin_family == sa_family_t(AF_INET) &&
+                    isLocalIPv4($0.pointee.sin_addr.s_addr)
+            }
+        }
+        guard localPeer else {
+            Darwin.close(fd)
+            return nil
+        }
         setNoSigPipe(fd)
         var yes: Int32 = 1
         setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &yes, socklen_t(MemoryLayout<Int32>.size))
         return fd
+    }
+
+    private static func isLocalIPv4(_ address: in_addr_t) -> Bool {
+        if address.bigEndian >> 24 == 127 { return true }
+        var interfaces: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&interfaces) == 0 else { return false }
+        defer { freeifaddrs(interfaces) }
+        var current = interfaces
+        while let iface = current {
+            if let addr = iface.pointee.ifa_addr, addr.pointee.sa_family == sa_family_t(AF_INET) {
+                let matches = addr.withMemoryRebound(to: sockaddr_in.self, capacity: 1) {
+                    $0.pointee.sin_addr.s_addr == address
+                }
+                if matches { return true }
+            }
+            current = iface.pointee.ifa_next
+        }
+        return false
     }
 
     static func close(_ fd: Int32) {

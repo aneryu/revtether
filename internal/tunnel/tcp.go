@@ -46,6 +46,11 @@ func installTCP(ctx context.Context, s *stack.Stack, d dialer.Dialer, log *slog.
 			log.Debug("tcp open", "target", target)
 		}
 		go func() {
+			stopClose := context.AfterFunc(ctx, func() {
+				_ = devConn.Close()
+				_ = hostConn.Close()
+			})
+			defer stopClose()
 			relayTCP(devConn, hostConn)
 			if st != nil {
 				st.TCP.Add(-1)

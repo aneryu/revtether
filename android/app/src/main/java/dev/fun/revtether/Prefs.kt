@@ -1,4 +1,4 @@
-package dev.fun.revtether
+package dev.`fun`.revtether
 
 import android.content.Context
 

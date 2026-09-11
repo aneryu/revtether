@@ -1,5 +1,7 @@
 # Reverse Tether — 跨平台 USB 反向共享网络技术方案 v1.1
 
+> 本文保留原始设计与验证计划。当前构建和使用方式以 [README.md](README.md) 为准；iOS 已采用容器 App 接收 usbmux、通过 `sendProviderMessage` 转发到 extension 的实现，下面的 extension 直接监听方案不是当前运行路径。
+
 支持 Android 与 iOS 的类 Gnirehtet 工具，命令 `revtether`。设备通过 USB 借用电脑网络。
 
 本版修订要点（相对 v1.0）：
@@ -106,7 +108,9 @@
 
 ```
 cmd/revtether/main.go       CLI
+cmd/revtether-app/          macOS 菜单栏 App（LSUIElement，无 Dock / 窗口）
 internal/
+  relay/run.go              电脑端主循环（CLI 与 App 共用）
   framing/framing.go        帧编解码
   transport/
     transport.go            Transport 接口、DeviceEvent
@@ -122,10 +126,10 @@ internal/
     stats.go                计数器
   dialer/dialer.go          Dialer 接口 + 直连实现
   resolvconf/resolvconf.go  读取系统 nameserver（5 s 缓存）
-  ui/status.go              终端状态刷新
+  ui/status.go              终端 / 菜单栏状态
 ```
 
-依赖：`gvisor.dev/gvisor`（go 分支）、`howett.net/plist`。其余标准库。
+依赖：`gvisor.dev/gvisor`（go 分支）、`howett.net/plist`；macOS App 额外用 `fyne.io/systray`。其余标准库。
 
 ### 5.2 帧编解码
 

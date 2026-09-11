@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- English is the fallback locale (values/). -->
+    <string name="app_name">Reverse Tether</string>
+
+    <string name="status_idle_title">Off</string>
+    <string name="status_starting_title">Preparing…</string>
+    <string name="status_waiting_title">Waiting for computer</string>
+    <string name="status_connected_title">Using computer network</string>
+    <string name="status_failed_title">Couldn\'t start</string>
+
+    <string name="status_idle_detail">Tap Start to use the computer\'s internet over USB.</string>
+    <string name="status_starting_detail">If a prompt appears, tap Allow.</string>
+    <string name="status_connected_detail">Keep the USB cable plugged in.</string>
+
+    <string name="step_usb">Plug in the USB cable</string>
+    <string name="step_computer">Open Reverse Tether on the computer</string>
+
+    <string name="action_start">Start</string>
+    <string name="action_starting">Preparing</string>
+    <string name="action_stop">Stop</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_exclude_apps">Mobile data apps</string>
+
+    <string name="error_vpn_denied">This app needs permission to use the computer\'s network. Try again and tap Allow.</string>
+
+    <string name="notif_channel">Reverse Tether</string>
+    <string name="vpn_session">Reverse Tether</string>
+
+    <string name="exclude_hint">Selected apps keep using this phone\'s network, not the computer\'s.</string>
+    <string name="exclude_search_hint">Search</string>
+    <string name="exclude_selected">%d selected</string>
+    <string name="exclude_empty">No apps found</string>
+    <string name="exclude_icon">App icon</string>
+</resources>
